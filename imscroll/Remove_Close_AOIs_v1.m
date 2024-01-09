@@ -29,22 +29,37 @@ function pc=Remove_Close_AOIs_v1(aoiinfo2,Unique_Landing_Radius)
 % You should have received a copy of the GNU General Public License
 % along with this software. If not, see <http://www.gnu.org/licenses/>.
 
-frm=aoiinfo2(1,1);      
-ave=aoiinfo2(1,2);      % Pick off frame, average and pixnum
-pixnum=aoiinfo2(1,5);
+%frm=aoiinfo2(1,1);
+frmlist=aoiinfo2(:,1);
+%ave=aoiinfo2(1,2);      % Pick off frame, average and pixnum
+avelist=aoiinfo2(:,2);
+%pixnum=aoiinfo2(1,5);
+pixnumlist=aoiinfo2(:,5);
 xytot=aoiinfo2(:,3:4);                  % [ x y ] list of aoi centers
 
 [landingcount colmn]=size(xytot);       % landingcount = starting # of aois in list
                                         % colmn = 2
 xytotaccum=zeros(landingcount,2);       % [x y] list that we will be outputing
                                         % of max length of landingcount
+frmlist_totaccum=zeros(landingcount,1);
+avelist_totaccum=zeros(landingcount,1);
+pixnumlist_totaccum=zeros(landingcount,1);
 ListIndx=1;
 for indx=1:landingcount
                         % Test each aoi against all the others
     tstaoi=xytot(indx,:);           % AOI under test
+    tstfrm=frmlist(indx,:);
+    tstave=avelist(indx,:);
+    tstpixnum=pixnumlist(indx,:);
+    
+    
     dtest=sqrt( (xytot(:,1)-tstaoi(1,1)).^2 + (xytot(:,2)-tstaoi(1,2)).^2 );
     logik=dtest~=0;             % Pick all AOIs other than the one under test
     xytotdum=xytot(logik,:);
+    
+    frmlistdum=frmlist(logik,:);
+    avelistdum=avelist(logik,:);
+    pixnumlistdum=pixnumlist(logik,:);
                                 % Distance of test aoi to all others
     dtest=sqrt( (xytotdum(:,1)-tstaoi(1,1)).^2 + (xytotdum(:,2)-tstaoi(1,2)).^2 );
     logik=dtest>(Unique_Landing_Radius);     % Keep only aois that are not too close together
@@ -52,6 +67,9 @@ for indx=1:landingcount
                     % Here if aoi under test is not close to any others
         xytotaccum(ListIndx,:)=tstaoi;  % In which case we keep the current tstaoi
                                         % and add it to the output list
+        frmlist_totaccum(ListIndx,:)=tstfrm;
+        avelist_totaccum(ListIndx,:)=tstave;
+        pixnumlist_totaccum(ListIndx,:)=tstpixnum;
         ListIndx=ListIndx+1;
     end
 end
@@ -60,8 +78,12 @@ end
         % Now eliminate all the empty entries in the output list
 logik=(xytotaccum(:,1)~=0)&(xytotaccum(:,2)~=0);
 xytotaccum=xytotaccum(logik,:);         % Keep only nonzero elements (zero from initialization
+frmlist_totaccum=frmlist_totaccum(logik,:);
+avelist_totaccum=avelist_totaccum(logik,:);
+pixnumlist_totaccum=pixnumlist_totaccum(logik,:);
+
 [rose colm]=size(xytotaccum);
                         % Construct the output aoiinfo2 list
-pc=[ones(rose,1)*frm  ones(rose,1)*ave    xytotaccum  ones(rose,1)*pixnum  [1:rose]' ]; 
-
+%pc=[ones(rose,1)*frm  ones(rose,1)*ave    xytotaccum  ones(rose,1)*pixnum  [1:rose]' ]; 
+pc=[frmlist_totaccum  avelist_totaccum    xytotaccum  pixnumlist_totaccum  [1:rose]' ];
 

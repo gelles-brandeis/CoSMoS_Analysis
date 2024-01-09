@@ -99,6 +99,7 @@ end
 %****end
                     % Pre-Allocate space
 if get(parenthandles.FitChoice,'Value')==4
+    % Gauss2dxy+int
     ImageDataParallel(:,:,nfrms)=zeros(naois,9);    % (aoiindx,DataEntryIndx,FrmIndx)
                                                     % Stacked matrices with
                                                     % each matrix containing the data for all the aois        
@@ -225,7 +226,47 @@ firstaoismall=firstfrm(ylowsmall:yhismall,xlowsmall:xhismall);
       FirstImageData=[aoiindx mapstruc_cell{1,aoiindx}.aoiinf(1) outarg(1) outarg(2)+xlow outarg(3)+ylow sigma outarg(4) sum(sum(firstaoismall))];
       %pc.ImageData=[pc.ImageData;aoiindx
       %mapstruc_cell{1,aoiindx}.aoiinf(1) outarg(1) outarg(2)+xlow outarg(3)+ylow outarg(4) outarg(5) sum(sum(firstaoi))];
+       case 8 
+
+        [1 aoiindx]   
+                                   % Here for prism-dispersed imaging.  We
+                                   % identify to which class the image belongs. 
+                                   % classes: [ROG RO RG OG R O G Z]= 1:8
+                                   % 
+                                   % shiftedx=mapstruc_cell{1,aoiindx}.aoiinf(3);         
+                                  % shiftedy=mapstruc_cell{1,aoiindx}.aoiinf(4);
+       oneaoiinfo2=mapstruc_cell{1,aoiindx}.aoiinf;         % [frame# ave aoix aoiy pixnum aoinumber]
+                                                    % Note: aoix and aoiy are drift-corrected already (inside build_2d_mapstruc_aois_frms() ) 
+       HalfOutputImageSize= parenthandles.aoiImageSet.HalfOutputImageSize;    % Image region boundaries defined
+                                                                        % by the current aoiImageSet, which
+                                                           % should be the calibration aoiImageSet w/ examplex
+                                                         % of each single dye class of image = R, O or G
+                                                         
+       RegisterFlag=0;                                      % =0  => register the image
+       RoundingPixelFraction=[0 0];                         % Register image to pixel center
+                                        % Fetch image from region offset around AOI and register
+                                        % image so AOI is centered on a pixel (gfoloder image source --add tiff tif later):
       
+       ExImageStruc=RegisterImage(parenthandles.gfolder,oneaoiinfo2,HalfOutputImageSize,RoundingPixelFraction, RegisterFlag);
+       ExImage=uint16(sum(ExImageStruc.frames,3)/oneaoiinfo2(1,2)); % Registered averaged image.  This image will be classified as 1:8
+                % Next, get the tstR, tstO, tstG from handles.aoiImageSet
+                 % and then call SpotCoefficients( )
+       ExImage_xy=oneaoiinfo2(1,3:4);   % Drift-corrected xy for this AOI      
+       NearR=Nearest_Images(ExImage_xy,5,parenthandles.aoiImageSet,5);        % 5 nearest R calibration images
+       NearO=Nearest_Images(ExImage_xy,6,parenthandles.aoiImageSet,5);        % 5 nearest O calibration images
+       NearG=Nearest_Images(ExImage_xy,7,parenthandles.aoiImageSet,5);        % 5 nearest G calibration images 
+       %SC=SpotCoefficients(ExImage,NearR.AveImage,NearO.AveImage,NearG.AveImage);   % Find optimized [b p j k] values: linear least squares
+                            %Find optimized [b p j k] values: nonlinear
+                            %least squares for which p,j,k>0, but b is unconstrained  
+       options=optimset('fminsearch');
+        options.MaxFunEvals=500000;
+        options.TolFun=1e-6;
+        options.TolX=1e-6;
+        options.MaxIter=10000;
+       SC=fminsearch('SpotCoefficients_PositiveNonlinear',[-150 .5 .5 .5],options,ExImage,NearR.AveImage,NearO.AveImage,NearG.AveImage);
+                           %[ (aoi#)  (frm#) (b)  (p) (j) (k) (shiftedx) (shiftedy) ] 
+       %FirstImageData=double([aoiindx oneaoiinfo2(1,1) SC.math' ExImage_xy ]);
+      FirstImageData=double([aoiindx oneaoiinfo2(1,1) SC(1) abs(SC(2:4)) ExImage_xy ]);
                                    
     
  
@@ -452,10 +493,59 @@ switchvalue=get(parenthandles.FitChoice,'Value');
 %****       pc.ImageData(rowindex,:)=[aoiindx2 mapstruc_cell{framemapindx,aoiindx2}.aoiinf(1) outarg(1) outarg(2)+xlow outarg(3)+ylow sigma outarg(4) sum(sum(currentaoismall))];
        %****pc.ImageData((framemapindx-1)*naois+aoiindx2,:)=[aoiindx2 mapstruc_cell{framemapindx,aoiindx2}.aoiinf(1) outarg(1) outarg(2)+xlow outarg(3)+ylow sigma outarg(4) sum(sum(currentaoismall))];
        %****ImageData((framemapindx-1)*naois+aoiindx2,:)=[aoiindx2 mapstruc_cell{framemapindx,aoiindx2}.aoiinf(1) outarg(1) outarg(2)+xlow outarg(3)+ylow sigma outarg(4) sum(sum(currentaoismall))];
+       
+                % [aoinumber framenumber amplitude xcenter ycenter sigma offset integrated_aoi (integrated pixnum) (original aoi#)]
        ImageDataParallel(aoiindx2,:,framemapindx)=[aoiindx2 mapstruc_cell{framemapindx,aoiindx2}.aoiinf(1) outarg(1) outarg(2)+xlow outarg(3)+ylow sigma outarg(4) sum(sum(currentaoismall))];
        
        %       pc.ImageData(rowindex,:)=[aoiindx2
  %       mapstruc_cell{framemapindx,aoiindx2}.aoiinf(1) outarg(1) outarg(2)+xlow-1 outarg(3)+ylow-1 outarg(4) outarg(5) sum(sum(currentaoi))];
+
+       case 8 
+       [framemapindx aoiindx2]                            % Here for prism-dispersed imaging.  We
+                                   % identify to which class the image belongs. 
+                                   % classes: [ROG RO RG OG R O G Z]= 1:8
+                                   % 
+                                   % shiftedx=mapstruc_cell{1,aoiindx}.aoiinf(3);         
+                                   % shiftedy=mapstruc_cell{1,aoiindx}.aoiinf(4);
+                                   
+                        % oneaoiinfo2 == information for current frame
+                        % number and AOI, (aoix and aoiy already drift corrected) 
+       
+       oneaoiinfo2=mapstruc_cell{framemapindx,aoiindx2}.aoiinf;         % [frame# ave aoix aoiy pixnum aoinumber]
+      
+                                                         % Note: aoix and aoiy are drift-corrected already (inside build_2d_mapstruc_aois_frms() ) 
+       
+       HalfOutputImageSize= parenthandles.aoiImageSet.HalfOutputImageSize;    % Image region boundaries defined
+                                                                        % by the current aoiImageSet, which
+                                                         % should be the calibration aoiImageSet w/ examplex
+                                                         % of each single dye class of image = R, O or G
+                                                         
+       RegisterFlag=0;                                      % =0  => register the image
+       RoundingPixelFraction=[0 0];                         % Register image to pixel center
+                                        % Fetch image from region offset around AOI and register
+                                        % image so AOI is centered on a pixel (gfoloder image source --add tiff tif later):
+       ExImageStruc=RegisterImage(parenthandles.gfolder,oneaoiinfo2,HalfOutputImageSize,RoundingPixelFraction, RegisterFlag);
+       ExImage=uint16(sum(ExImageStruc.frames,3)/oneaoiinfo2(1,2)); % Registered averaged image.  This image will be classified as 1:8
+                % Next, get the tstR, tstO, tstG from handles.aoiImageSet
+                 % and then call SpotCoefficients( )
+       ExImage_xy=oneaoiinfo2(1,3:4);   % Drift-corrected xy for this frame number and AOI       
+       NearR=Nearest_Images(ExImage_xy,5,parenthandles.aoiImageSet,5);        % 5 nearest R calibration images
+       NearO=Nearest_Images(ExImage_xy,6,parenthandles.aoiImageSet,5);        % 5 nearest O calibration images
+       NearG=Nearest_Images(ExImage_xy,7,parenthandles.aoiImageSet,5);        % 5 nearest G calibration images 
+       %SC=SpotCoefficients(ExImage,NearR.AveImage,NearO.AveImage,NearG.AveImage);   % Find optimized [b p j k] values
+                           %[ (aoi#)  (frm#) (b)  (p) (j) (k) (shiftedx) (shiftedy) ]
+        options=optimset('fminsearch');
+        options.MaxFunEvals=500000;
+        options.TolFun=1e-6;
+        options.TolX=1e-6;
+        options.MaxIter=10000;
+        %keyboard
+       SC=fminsearch('SpotCoefficients_PositiveNonlinear',[-150 .5 .5 .5],options,ExImage,NearR.AveImage,NearO.AveImage,NearG.AveImage);
+                           %[ (aoi#)  (frm#) (b)  (p) (j) (k) (shiftedx) (shiftedy) ] 
+
+       
+       %ImageDataParallel(aoiindx2,:,framemapindx)=double([aoiindx2 oneaoiinfo2(1,1) SC.math' ExImage_xy ]);
+       ImageDataParallel(aoiindx2,:,framemapindx)=double([aoiindx2 oneaoiinfo2(1,1) SC(1) abs(SC(2:4)) ExImage_xy ]);
       
       
      end            %END of switch

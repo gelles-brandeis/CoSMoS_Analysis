@@ -3,7 +3,7 @@ function varargout = plotargout(varargin)
 %    FIG = PLOTARGOUT launch plotargout GUI.
 %    PLOTARGOUT('callback_name', ...) invoke the named callback.
 
-% Last Modified by GUIDE v2.5 07-Oct-2015 11:17:49
+% Last Modified by GUIDE v2.5 17-Feb-2018 17:26:07
 
 % 3/28/10  LJF Now using remove_event_v1 rather than remove_event.  Also
 % added AOI# to column 7 of the CumulativeIntervalArray and PTCA{1,10}
@@ -28,6 +28,9 @@ if ishandle(varargin{1})  % Launch GUI
 
 	% Generate a structure of handles to pass to callbacks, and store it. 
 	handles = guihandles(fig);
+    %installPottslab                         % Used for the Step Finder function, from Aaron's CPS gui, 
+                                            % google 'installPottslab Matlab' 
+                                            % or look in CPS gui (count photobleach steps)    
     handles.aoiFrame=[];                        % Will contain the aoi image data and its fit
                                                 % as constructed from
                                                 % compare_aoi_fit() in the
@@ -57,10 +60,10 @@ if ishandle(varargin{1})  % Launch GUI
     %  data processing info and the high/low event intervals for that
     %  aoifits file.
    
-    CellArrayDescription=['(1:AOIfits Filename) (2:AOI Number) (3:Upward Threshold, sigma units) (4:Down Threshold, sigma units)'...
+    CellArrayDescription=['(1:AOIfits Filename) (2:AOI Number) (3:[(Spot Proximity Radius) (Upward Threshold)], sigma units) (4:Down Threshold, sigma units)'...
          '(5:DetrendedMean (6:Std) (7:MeanStdFrameRange Nx2) (8:DataFrameRange Nx2) (9:TimeBase 1xM) [10:Interval array Nx7]'...
          ' 11:InputTrace 2xP  12:DetrendedTrace 2xP 13:BinaryInputTrace Lx3  '...
-         '14:BinaryInputTraceDescription 15:DetrendFrameRange Lx2 16:UncorrectedTraceMean'];
+         '14:BinaryInputTraceDescription 15:DetrendFrameRange Lx2 16:UncorrectedTraceMean 17: SpotProximityRadius'];
      % Both InputTrace and DetrendedTrace are [(frame #)   (integrated intensity)]
      % Description of the cell array element containing the interval array information                                     
     IntervalArrayDescription=['(low or high =-2,0,2 or -3,1,3) (frame start) (frame end) (delta frames) (delta time (sec)) (interval ave intensity) AOI#'];
@@ -69,17 +72,19 @@ if ishandle(varargin{1})  % Launch GUI
            % runs over just the frame range selected for interval detection
     BinaryInputTraceDescription=['(low or high =0 or 1) InputTrace(:,1) InputTrace(:,2)'];
                     % the IntervalDataStructure structure 
-    handles.IntervalDataStructure.PresentTraceCellArray=cell(1,16);  % Holds trace presently being processed
+    handles.IntervalDataStructure.PresentTraceCellArray=cell(1,17);  % Holds trace presently being processed
     handles.IntervalDataStructure.PresentTraceCellArray{1,14}=BinaryInputTraceDescription;
     %handles.IntervalDataStructure.PresentTraceCellArray{1,4}=str2num( get(handles.DownThreshold,'String') );
     %handles.IntervalDataStructure.PresentTraceCellArray{1,3}=str2num( get(handles.UPThreshold,'String') );
+    handles.IntervalDataStructure.PresentTraceCellArray{1,17}=[str2num(get(handles.EditSpotProximityRadius,'String')) ];
     handles.IntervalDataStructure.OneTraceCellDescription=CellArrayDescription;   % describes contents of cell array
-    handles.IntervalDataStructure.AllTracesCellArray=cell(1,16);     % Cumulative data from all traces
+    handles.IntervalDataStructure.AllTracesCellArray=cell(1,17);     % Cumulative data from all traces
     handles.IntervalDataStructure.CumulativeIntervalArray=[];        % Just the interval list from all traces
     handles.IntervalDataStructure.IntervalArrayDescription=IntervalArrayDescription;  % Describes the interval list contents
     handles.IntervalDataStructure.AllSpots=[];                      %Will hold the AllSpots structure from imscroll (spot picker option)
     guidata(fig, handles);
     handles.parenthandles_fig = varargin{1};            % Get the handle for the parent gui figure  
+   
     % save the handles structure
     handles.SpotProximityRadius=1.0;                    % Max Distance between detected spot and AOI center to count spot as a landing 
     handles.DefaultXLimitsBottom=[0 1000];              % Default limits of X axis for bottom plot
@@ -97,6 +102,20 @@ if ishandle(varargin{1})  % Launch GUI
                                                 % the 'aoifits' structure
     set(parenthandles.OutputFilename,'String','default.dat');
                                         % Get the AllSpots structure (may be empty) 
+    if get(parenthandles.FitChoice,'Value')==8
+                    % Here if determining ClassID for prism-dispersed imaging
+                    % Alter the plot labeling to match the data for both
+                    % the middle and bottom plots
+        midYS=get(handles.MiddlePlotY,'String');
+        midYS{1}='background';
+        midYS{2}='Red amp';
+        midYS{3}='O amp';
+        midYS{4}='G amp';
+        midYS{5}='X position';
+        midYS{6}='Y position';
+        set(handles.MiddlePlotY,'String',midYS)
+        set(handles.BottomPlotY,'String',midYS)
+    end
     handles.IntervalDataStructure.AllSpots=FreeAllSpotsMemory(parenthandles.AllSpots);
     handles.IntervalDataStructure2=handles.IntervalDataStructure;   % Duplicates the structure of 
                    % the IntervalDataStructure so we can import two of them for plotting purposes  
@@ -189,6 +208,8 @@ function varargout = DisplayMiddle_Callback(h, eventdata, handles, varargin)
 %parenthandles=guidata(gcbo);
 %args=parenthandles.fitdata;
 
+figure(24);clf;hold off
+axes(handles.axes2);hold off
 parenthandles = guidata(handles.parenthandles_fig);         % Get the handle structure of the parent gui
                                                             % Look at the
                                                             % if ishandle()
@@ -197,17 +218,6 @@ parenthandles = guidata(handles.parenthandles_fig);         % Get the handle str
                                                             % function.
 aoifits=parenthandles.aoifits1;
 argouts=aoifits.data;
-argnumber=get(handles.MiddlePlotY,'Value');
-flagg=0;
-if argnumber==8
-    flagg=1;        % Plot the Binary Spot Trace.  Very awkward
-    argnumber=1;    % Plot the amplitude, then we'll overwrite
-end
-if argnumber==7
-                        % Here to plot background
-    argouts=aoifits.BackgroundData;
-    argnumber=6;
-end
 axes(handles.axes2);
 maxaois=max(argouts(:,1));                       % Number of AOIs in data set
 set(handles.MaxAOIs,'String',num2str(maxaois))
@@ -224,30 +234,189 @@ else
                                                 % the max in the set
     oneargouts=argouts;
 end
-figure(24);plot(oneargouts(:,2),oneargouts(:,argnumber+2),'r',oneargouts(:,2),oneargouts(:,argnumber+2),'b-');shg
-axes(handles.axes2);
-plot(oneargouts(:,2),oneargouts(:,argnumber+2),'r',oneargouts(:,2),oneargouts(:,argnumber+2),'b-');
-
-if flagg==1                 % True if initial argnumber ==8 (Binary Spot Trace)
-    radius=handles.SpotProximityRadius;           % Proximity of spot to AOI center
-    radius_hys=str2num(get(handles.UpThreshold,'String'));
-    Bin01Trace=AOISpotLanding(aoinumber,radius,parenthandles,aoifits.aoiinfo2,radius_hys);          % 1/0 binary trace of spot landings
+argnumber=get(handles.MiddlePlotY,'Value');
+                % Plot according to the argnumber
+ % [aoinumber framenumber amplitude xcenter ycenter sigma offset integrated_aoi (integrated pixnum) (original aoi#)]
+switch argnumber
+    case 1
+        %Plot the amplitude
+        figure(24);plot(oneargouts(:,2),oneargouts(:,3),'r',oneargouts(:,2),oneargouts(:,3),'b-');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,3),'r',oneargouts(:,2),oneargouts(:,3),'b-');
+    case 2
+        %Plot the xzero
+        figure(24);plot(oneargouts(:,2),oneargouts(:,4),'r',oneargouts(:,2),oneargouts(:,4),'b-');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,4),'r',oneargouts(:,2),oneargouts(:,4),'b-');          
+    case 3
+        %Plot the yzero
+        figure(24);plot(oneargouts(:,2),oneargouts(:,5),'r',oneargouts(:,2),oneargouts(:,5),'b-');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,5),'r',oneargouts(:,2),oneargouts(:,5),'b-');     
+    case 4
+        %Plot the sigma
+        figure(24);plot(oneargouts(:,2),oneargouts(:,6),'r',oneargouts(:,2),oneargouts(:,6),'b-');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,6),'r',oneargouts(:,2),oneargouts(:,6),'b-'); 
+    case 5
+        %Plot the offset
+        figure(24);plot(oneargouts(:,2),oneargouts(:,7),'r',oneargouts(:,2),oneargouts(:,7),'b-');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,7),'r',oneargouts(:,2),oneargouts(:,7),'b-');
+    case 6
+        %Plot the integrated intensity
+        figure(24);plot(oneargouts(:,2),oneargouts(:,8),'r',oneargouts(:,2),oneargouts(:,8),'b-');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,8),'r',oneargouts(:,2),oneargouts(:,8),'b-');
+    case 7
+        %Plot the background integrated intensity
+        argouts=aoifits.BackgroundData;
+        if aoinumber<=maxaois
+                                                % Logical array that picks
+                                                % out matching argouts entries
+            logik=( argouts(:,1)==aoinumber );
+            oneargouts=argouts(logik,:);                      % Sub matrix for just one AOI
+       else
+                                                % Use entire data set if
+                                                % chosen AOI number exceeds
+                                                % the max in the set
+            oneargouts=argouts;    
+       end
+        figure(24);plot(oneargouts(:,2),oneargouts(:,8),'r',oneargouts(:,2),oneargouts(:,8),'b-');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,8),'r',oneargouts(:,2),oneargouts(:,8),'b-');
+    case 8
+        % Plot the Binary Spot Trace
+        radius=handles.SpotProximityRadius;           % Proximity of spot to AOI center
+        radius_hys=str2num(get(handles.UpThreshold,'String'));
+        Bin01Trace=AOISpotLanding(aoinumber,radius,parenthandles,aoifits.aoiinfo2,radius_hys);          % 1/0 binary trace of spot landings
                                                                    % w/in radius of the AOI center
-    figure(24);plot(Bin01Trace(:,1),Bin01Trace(:,2),'b');           % Plot the binary trace
+                  % Look for value to remove intervals of 0's (zeros) that are too short
+        if get(handles.CumulativeIntervalPopup,'Value')==6
+                        % If popup set to 'Remove Short 0 Intervals' then we will get rid of false neagatives using value in EditFrame text  
+            Min0=str2num( get(handles.EditFrame,'String'));
+        else
+            Min0=1;
+        end 
+        Bin01Trace(:,2)=RemoveFalseNegativesMiddle(Bin01Trace(:,2),Min0);
+                                                                   
+                                                                   
+                                                                   
+        figure(24);plot(Bin01Trace(:,1),Bin01Trace(:,2),'b');           % Plot the binary trace
     
-    axes(handles.axes2);
-    plot(Bin01Trace(:,1),Bin01Trace(:,2),'b')
-    
-end
+        axes(handles.axes2);
+        plot(Bin01Trace(:,1),Bin01Trace(:,2),'b')
+        figure(24);h=gca;set(h,'Ylim',[-1 2]);shg
+        axes(handles.axes2);h=gca;set(h,'Ylim',[-1 2]);shg
+        
+    case 9
+        % Plot the integrated intensity on the middle plot AND 
+        % the Step Finder trace on the top plot
+        %Plot the integrated intensity
+        figure(24);plot(oneargouts(:,2),oneargouts(:,8),'r',oneargouts(:,2),oneargouts(:,8),'b-');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,8),'r',oneargouts(:,2),oneargouts(:,8),'b-');
+        % Plot the Step Finder trace
+        StepThreshold=round(get(handles.SliceIndexSlider,'Value'));  % Fetch threshold from bottom slider
+        StepSensitivity=round(get(handles.FitFrameNumberSlider,'Value'));   % Fetch sensitivity from top slider
+        intTrace=oneargouts(:,8);
+                            % Follow programming in CPS.m from Aaron
+                            % Normalize the trace
+        
+        intTrace_norm = (intTrace - min(intTrace) ) / ( max(intTrace) - min(intTrace) );
+                            % Obtain the trace in step form
+        StepTrace_norm =  minL1Potts(intTrace_norm, StepSensitivity);
+        figure(27);plot(oneargouts(:,2),StepTrace_norm,'k');shg
+        axes(handles.axes1);
+        plot(oneargouts(:,2),StepTrace_norm,'k');
+                            % de-Normalize the step trace (follow
+                            % programming in IdentifySteps.m
+        StepTrace = StepTrace_norm * (max(intTrace) - min(intTrace)) +min(intTrace);
+        derStepTrace=diff(StepTrace);   % StepTrace differential
+        StepNumber=sum( derStepTrace~=0);   % Number of steps in StepTrace
+        [StepIndices,~,StepSizes]=find(derStepTrace);   % row col and value of nonzero elements in derStepTrace
+        StepIndices=oneargouts(StepIndices,2);          % Convert StepIndices row to frame number of StepTrace
+    case 10
+        % Plot integrated intensity for aoifits1 and aoifits2 and aoifits3
+        % First plot aoifits1
+        figure(24);plot(oneargouts(:,2),oneargouts(:,8),'r');shg
+        axes(handles.axes2);
+        plot(oneargouts(:,2),oneargouts(:,8),'r');
+        
+        % Next plot for aoifits2
+        aoifits=parenthandles.aoifits2;
+        argouts=aoifits.data;
+        axes(handles.axes3);
+        maxaois=max(argouts(:,1));                       % Number of AOIs in data set
+        %set(handles.MaxAOIs,'String',num2str(maxaois))
+                                                % Get the AOI number to plot
+        %aoinumber=str2num(get(handles.MiddleAOIPlot,'String'));
+        aoinumber=min([ maxaois aoinumber]);      % Do not let aoinumber go outside 1 to maxaois
+        if aoinumber<1
+            aoinumber=1;
+        end
+        logik=( argouts(:,1)==aoinumber );
+        oneargouts=argouts(logik,:);                      % Sub matrix for just one AOI
+        figure(25);plot(oneargouts(:,2),oneargouts(:,8),'b',oneargouts(:,2),oneargouts(:,8),'b-');shg
+        axes(handles.axes3);
+        plot(oneargouts(:,2),oneargouts(:,8),'b');
+        set(handles.BottomAOIPlot,'String',num2str(aoinumber));
+        % Next plot for aoifits3
+        aoifits=parenthandles.aoifits3;
+        argouts=aoifits.data;
+        axes(handles.axes1);
+        maxaois=max(argouts(:,1));                       % Number of AOIs in data set
+        %set(handles.MaxAOIs,'String',num2str(maxaois))
+                                                % Get the AOI number to plot
+        %aoinumber=str2num(get(handles.MiddleAOIPlot,'String'));
+        aoinumber=min([ maxaois aoinumber]);      % Do not let aoinumber go outside 1 to maxaois
+        if aoinumber<1
+            aoinumber=1;
+        end
+        logik=( argouts(:,1)==aoinumber );
+        oneargouts=argouts(logik,:);                      % Sub matrix for just one AOI
+        figure(27);plot(oneargouts(:,2),oneargouts(:,8),'k',oneargouts(:,2),oneargouts(:,8),'k-');shg
+        axes(handles.axes1);
+        plot(oneargouts(:,2),oneargouts(:,8),'k');
+    case 11
+        %Plot the integrated trace, and color the sections where a 
+        %co-localized spot has been detected
+         %Plot the integrated intensity
+        
+        if isempty(handles.IntervalDataStructure.CumulativeIntervalArray)
+                  % Here if the Intervals structure has not been loaded
+            set(handles.MiddlePlotY,'Value',6);     % Change dropdown menu to just display
+                                                % integrated trace (not bicolor trace since
+                                                % the Intervals structure is not loaded 
+           
+            DisplayMiddle_Callback(handles.DisplayBottom, eventdata, handles);
+        else
+                  % Here if the Intervals structure has been loaded, in which
+                  % case we can color the sections of the trace where a spot
+                  % has been detected
+            dat=extract_aoifits_aois(aoifits);
+            cia=handles.IntervalDataStructure.CumulativeIntervalArray;
+            offset=0;
+            LowColor=[0.5 0.5 0.5];      % gray
+            HighColor=[1 0 0];           % red
+            %keyboard
+            AOInum=oneargouts(1,1);     % Number of the AOI being plotted
+                                                                                     % 24=figure number
+            ColorColocalizations_plotargout(dat,cia,AOInum,LowColor,HighColor,offset, 24, handles);            
+           
+        end
+end  
 
                                             % Now check for manual or
                                             % automatic axis scaling
 if (get(handles.AxisScale,'Value')) ==0
     figure(24);axis auto
     axes(handles.axes2);axis auto
-    if flagg==1         % True is plotting 1/0 Binary Spot Trace
-        figure(24);h=gca;set(h,'Ylim',[-1 2]);
-        axes(handles.axes2);h=gca;set(h,'Ylim',[-1 2]);
+   
+    if argnumber==8         % True is plotting 1/0 Binary Spot Trace
+        figure(24);h=gca;set(h,'Ylim',[-1 2]);shg
+        axes(handles.axes2);h=gca;set(h,'Ylim',[-1 2]);shg
+        
     end
 else
     figure(24);axis(eval(get(handles.AxisLimits,'String')))
@@ -308,6 +477,8 @@ function DisplayBottom_Callback(hObject, eventdata, handles,varargin)
 %images=varargin{1};
 %dum=varargin{2};
 %folder=varargin{3};
+figure(25);clf;hold off
+axes(handles.axes3);hold off
 parenthandles = guidata(handles.parenthandles_fig);         % Get the handle structure of the parent gui
                                                             % Look at the
                                                             % if ishandle()
@@ -383,8 +554,10 @@ end
                                                 % parameters on the gui and
                                                 % in Fig 25
 
-PlotBottom_v1(handles,parenthandles,oneargouts,argnumber); 
-
+returnpc=PlotBottom_v1(handles,parenthandles,oneargouts,argnumber); 
+if returnpc==10
+    DisplayBottom_Callback(handles.DisplayBottom, eventdata, handles)
+end
 %figure(25);plot(oneargouts(:,2),oneargouts(:,argnumber+2),'b',oneargouts(:,2),oneargouts(:,argnumber+2),'r');
 %axes(handles.axes3)
 %plot(oneargouts(:,2),oneargouts(:,argnumber+2),'b',oneargouts(:,2),oneargouts(:,argnumber+2),'r');
@@ -498,21 +671,34 @@ function FitFrameNumberSlider_Callback(hObject, eventdata, handles)
 %        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
 
 global argouts imageset folderpass%parenthandles
-if get(handles.DisplayScales,'Value')==1
-    % here if slider controls the maximum value for the gallery display
-    mxval=get(handles.FitFrameNumberSlider,'Value');
-    set(handles.FitFrameNumber,'String',num2str(round(mxval)));
-                                % Now update the display
-    clowval=round(get(handles.SliceIndexSlider,'Value'));  % set minimum display intensity
-    chival=round(get(handles.FitFrameNumberSlider,'Value'));   % set maximum display intensity
-    axes(handles.axes1);
-    caxis([clowval chival]);                            % changes the current display to match
-                                       % the new hi/lo intensity settings
-    axes(handles.axes10);                               % Also change display for single aoi 
-    caxis([clowval chival]);
-else
+switch  get(handles.SliderChoice,'Value')
+    case 1
+                        % Here if sliders for Display Scales (min  max)
 
-    parenthandles = guidata(handles.parenthandles_fig); 
+        % here if slider controls the maximum value for the gallery display
+        mxval=get(handles.FitFrameNumberSlider,'Value');
+        set(handles.FitFrameNumber,'String',num2str(round(mxval)));
+                                % Now update the display
+        clowval=round(get(handles.SliceIndexSlider,'Value'));  % set minimum display intensity
+        chival=round(get(handles.FitFrameNumberSlider,'Value'));   % set maximum display intensity
+        axes(handles.axes1);
+        caxis([clowval chival]);                            % changes the current display to match
+                                       % the new hi/lo intensity settings
+        axes(handles.axes10);                               % Also change display for single aoi 
+        caxis([clowval chival]);
+    case 2
+                    % Here if sliders used to adjust StepFinder parameters
+                    % Test if user is making a step plot in axes1.  If so
+                    % fetch the values off both sliders and replot the step
+                    % plot in handles.axes1
+        SensitivityValue=get(handles.FitFrameNumberSlider,'Value');
+        SensitivityValue=round(SensitivityValue*100)/100; %Truncate to two hundreths digit
+        set(handles.FitFrameNumber,'String',num2str(SensitivityValue));
+        
+    case 3
+                    % Here to plot AOI slices or contours
+
+        parenthandles = guidata(handles.parenthandles_fig); 
                                                         % imageset is the data set of
                                                         % images
                                                         % parenthandles is the 'handles' set
@@ -522,65 +708,65 @@ else
                                                         % slider switch:
                                                         %
                                                         % Get frame number from slider
-    framenumber=round(get(handles.FitFrameNumberSlider,'Value'))
-    set(handles.FitFrameNumber,'String',num2str(framenumber));
-    dum=getframes_v1(parenthandles);
-    imageset=dum;
-    %dum=imageset(:,:,1);
-    dum=dum-dum;
-    %dum=imsubtract(dum,dum); 
-    frmnum=str2num(get(handles.FitFrameNumber,'String'));
-    aoinum=str2num(get(handles.MiddleAOIPlot,'String'));
-%ave=round(str2double(get(parenthandles.FrameAve,'String')));
+        framenumber=round(get(handles.FitFrameNumberSlider,'Value'))
+        set(handles.FitFrameNumber,'String',num2str(framenumber));
+        dum=getframes_v1(parenthandles);
+        imageset=dum;
+        %dum=imageset(:,:,1);
+        dum=dum-dum;
+        %dum=imsubtract(dum,dum); 
+        frmnum=str2num(get(handles.FitFrameNumber,'String'));
+        aoinum=str2num(get(handles.MiddleAOIPlot,'String'));
+             %ave=round(str2double(get(parenthandles.FrameAve,'String')));
 
-    aoifits=parenthandles.aoifits1;
-    argouts=aoifits.data;                                %  Fit data portion of the aoifits array that we store
-    pixnum=aoifits.parameter(2);
-    ave=aoifits.parameter(1);
-    width=get(handles.XWidth,'Value');                      % AOI width setting from the popup menu
-    log=( argouts(:,1)==aoinum)&( argouts(:,2)==frmnum );
-    oneargout=argouts(log,:);                      % Pick argouts line containing the
+        aoifits=parenthandles.aoifits1;
+        argouts=aoifits.data;                                %  Fit data portion of the aoifits array that we store
+        pixnum=aoifits.parameter(2);
+        ave=aoifits.parameter(1);
+        width=get(handles.XWidth,'Value');                      % AOI width setting from the popup menu
+        log=( argouts(:,1)==aoinum)&( argouts(:,2)==frmnum );
+        oneargout=argouts(log,:);                      % Pick argouts line containing the
                                                % data for this aoi and
                                                % framenumber
                                                 %
                                                 % Now get the image AOI and
                                                 % the fit to it
 
-    cf=compare_aoi_fit(oneargout,imageset,pixnum*width,ave,folderpass,parenthandles);
+        cf=compare_aoi_fit(oneargout,imageset,pixnum*width,ave,folderpass,parenthandles);
 
-    handles.aoiFrame=cf;                            % cf(:,:,1) is the data
+        handles.aoiFrame=cf;                            % cf(:,:,1) is the data
                                                 % cf(:,:,2) is the fit
-    guidata(gcbo,handles);
-    slicenumber=round(get(handles.SliceIndexSlider,'Value'));
-    axes(handles.axes1);
+        guidata(gcbo,handles);
+        slicenumber=round(get(handles.SliceIndexSlider,'Value'));
+        axes(handles.axes1);
 
-    [mcf ncf]=size(cf(:,:,1));
+        [mcf ncf]=size(cf(:,:,1));
 
 
-    plottype=get(handles.TopPlotChoice,'Value');    % Popup menu for choice of plot type
-    if (plottype==1)
-        plot([1:ncf],cf(slicenumber,:,1),'r',[1:ncf],cf(slicenumber,:,2),'b')
-    elseif (plottype==2)
+        plottype=get(handles.TopPlotChoice,'Value');    % Popup menu for choice of plot type
+        if (plottype==1)
+            plot([1:ncf],cf(slicenumber,:,1),'r',[1:ncf],cf(slicenumber,:,2),'b')
+        elseif (plottype==2)
                                                 % Here for contour plots of
                                                 % image and fit
                                                 % Get the mean and max of
                                                 % the data image AOI
-        mncf=mean(mean(cf(:,:,1)));
-        mxcf=max(max(cf(:,:,1)));
-        hold off
-        imagesc(cf(:,:,2));colormap(gray);axis('equal');shg
-        hold on
+            mncf=mean(mean(cf(:,:,1)));
+            mxcf=max(max(cf(:,:,1)));
+            hold off
+            imagesc(cf(:,:,2));colormap(gray);axis('equal');shg
+            hold on
                                                 % Retrieve the contour values
                                                 % from the gui
-        cval=str2num(get(handles.ContourLevels,'String'))
-        [c h]=contour(cf(:,:,1),mncf+(mxcf-mncf)*cval,'y');
-        hold off
-        %ndx=length(h)
-        %colours=['r' 'r' 'y' 'w']
-        %for indx=1:ndx
-        %set(h(indx),'EdgeColor',colours( rem(indx,3)+1))
-        %end
-    end
+            cval=str2num(get(handles.ContourLevels,'String'))
+            [c h]=contour(cf(:,:,1),mncf+(mxcf-mncf)*cval,'y');
+            hold off
+            %ndx=length(h)
+            %colours=['r' 'r' 'y' 'w']
+            %for indx=1:ndx
+            %set(h(indx),'EdgeColor',colours( rem(indx,3)+1))
+            %end
+        end
 end
 
 
@@ -612,21 +798,36 @@ function FitFrameNumber_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'String') returns contents of FitFrameNumber as text
 %        str2double(get(hObject,'String')) returns contents of FitFrameNumber as a double
 
-
+% Callback for editable text region next to Frame Number slider
 % --- Executes on button press in Initialize.
 % This is used to set the max and min of the slider according to
 % the set of frame numbers in the data set
                     % Radio button pushed:  treat sliders as display scales
-if get(handles.DisplayScales,'Value')==1
+switch get(handles.SliderChoice,'Value')
+    case 1
+                % Here using slider to asetting max to adjust contrast/brightness
                             % Get number off text field
-    FitFrameNumberVal=str2num(get(handles.FitFrameNumber,'String'));
+        FitFrameNumberVal=str2num(get(handles.FitFrameNumber,'String'));
                             % Redefine max value for sliders
-    set(handles.FitFrameNumberSlider,'Max',FitFrameNumberVal)
-    set(handles.SliceIndexSlider,'Max',FitFrameNumberVal)
-    FitFrameNumberSliderVal=round(get(handles.FitFrameNumberSlider,'Value'));
+        set(handles.FitFrameNumberSlider,'Max',FitFrameNumberVal)
+        set(handles.SliceIndexSlider,'Max',FitFrameNumberVal)
+        FitFrameNumberSliderVal=round(get(handles.FitFrameNumberSlider,'Value'));
                             % rewrite text field to reflect current slider
                             % value
-    set(handles.FitFrameNumber,'String',num2str(FitFrameNumberSliderVal))
+        set(handles.FitFrameNumber,'String',num2str(FitFrameNumberSliderVal))
+    case 2
+                       % Here using slider to adjust Step Finding
+                       % parameters (same code as contrast/brightness)
+                            % Get number off text field
+        SensitivityVal=str2num(get(handles.FitFrameNumber,'String'));
+                            % Redefine max value for sliders
+        set(handles.FitFrameNumberSlider,'Max',SensitivityVal)
+       
+        FitFrameNumberSliderVal=round(get(handles.FitFrameNumberSlider,'Value'));
+                            % rewrite text field to reflect current slider
+                            % value
+        set(handles.FitFrameNumber,'String',num2str(round(FitFrameNumberSliderVal*100)/100))
+        
 end
     
 function Initialize_Callback(hObject, eventdata, handles)
@@ -927,27 +1128,37 @@ function SliceIndexSlider_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'Value') returns position of slider
 %        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
-if get(handles.DisplayScales,'Value')==1
-    % here if slider controls the maximum value for the gallery display
-    mnval=get(handles.SliceIndexSlider,'Value');
-    set(handles.SliceIndexNumber,'String',num2str(round(mnval)));
+switch get(handles.SliderChoice,'Value')
+    case 1
+        % here if slider controls the minimum value for the gallery display
+        mnval=get(handles.SliceIndexSlider,'Value');
+        set(handles.SliceIndexNumber,'String',num2str(round(mnval)));
                                 % Now update the display
-    clowval=round(get(handles.SliceIndexSlider,'Value'));  % set minimum display intensity
-    chival=round(get(handles.FitFrameNumberSlider,'Value'));   % set maximum display intensity
-    axes(handles.axes1);
-    caxis([clowval chival]);                            % changes the current display to match
+        clowval=round(get(handles.SliceIndexSlider,'Value'));  % set minimum display intensity
+        chival=round(get(handles.FitFrameNumberSlider,'Value'));   % set maximum display intensity
+        axes(handles.axes1);
+        caxis([clowval chival]);                            % changes the current display to match
                                        % the new hi/lo intensity settings
-    axes(handles.axes10);              % Also change display scale for single aoi 
-    caxis([clowval chival]);
-else
+        axes(handles.axes10);              % Also change display scale for single aoi 
+        caxis([clowval chival]);
+    case 2
+        % Here if slider controls value of Step Finder threshold
+        % Test if user is making a step plot in axes1.  If so
+        % fetch the values off both sliders and replot the step
+        % plot in handles.axes1
+         threshold=get(handles.SliceIndexSlider,'Value');
+         threshold=round(threshold*100)/100;        %Truncate threshold to hundreths for display
+        set(handles.SliceIndexNumber,'String',num2str(threshold));
+    case 3
+                % Here is slider controls slice through AOI
 
 
-    axes(handles.axes1)
-    slicenumber=round(get(handles.SliceIndexSlider,'Value'));
-    set(handles.SliceIndexNumber,'String',num2str(slicenumber));
-    cf=handles.aoiFrame;                                            % Fetch the current AOI data/fit
-    [mcf ncf]=size(cf(:,:,1));
-    plot([1:ncf],cf(slicenumber,:,1),'r',[1:ncf],cf(slicenumber,:,2),'b')
+        axes(handles.axes1)
+        slicenumber=round(get(handles.SliceIndexSlider,'Value'));
+        set(handles.SliceIndexNumber,'String',num2str(slicenumber));
+        cf=handles.aoiFrame;                                            % Fetch the current AOI data/fit
+        [mcf ncf]=size(cf(:,:,1));
+        plot([1:ncf],cf(slicenumber,:,1),'r',[1:ncf],cf(slicenumber,:,2),'b')
 end
 
 % --- Executes during object creation, after setting all properties.
@@ -973,7 +1184,32 @@ function SliceIndexNumber_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'String') returns contents of SliceIndexNumber as text
 %        str2double(get(hObject,'String')) returns contents of SliceIndexNumber as a double
-
+switch get(handles.SliderChoice,'Value')
+    case 1
+                % Here using slider to adjust contrast/brightness
+                            % Get number off text field
+        SliceIndexNumberVal=str2num(get(handles.SliceIndexNumber,'String'));
+                            % Redefine max value for sliders
+        set(handles.SliceIndexSlider,'Max',SliceIndexNumberVal)
+        
+        SliceIndexSliderVal=round(get(handles.SliceIndexSlider,'Value'));
+                            % rewrite text field to reflect current slider
+                            % value
+        set(handles.SliceIndexNumber,'String',num2str(SliceIndexSliderVal))
+    case 2
+                       % Here using slider to adjust Step Finding
+                       % parameters (same code as contrast/brightness)
+                            % Get number off text field
+        thresholdVal=str2num(get(handles.SliceIndexNumber,'String'));
+                            % Redefine max value for sliders
+        set(handles.SliceIndexSlider,'Max',thresholdVal)
+       
+        thresholdSliderVal=round(get(handles.SliceIndexSlider,'Value'));
+                            % rewrite text field to reflect current slider
+                            % value
+        set(handles.SliceIndexNumber,'String',num2str(round(thresholdSliderVal*100)/100))
+        
+end
 
 % --- Executes during object creation, after setting all properties.
 function TopPlotChoice_CreateFcn(hObject, eventdata, handles)
@@ -1457,6 +1693,8 @@ switch ButtonChoiceValue
     PTCA{1,6}=std(sublist_onedat(:,2));
     set(handles.AveValue,'String',num2str([PTCA{1,5} PTCA{1,16}]));  % Print both detrended and uncorrected trace means
     set(handles.StdDev,'String',num2str(PTCA{1,6}));
+    set(handles.StdDev,'Value',PTCA{1,6});
+    set(handles.AveValue,'Value',PTCA{1,5});
     handles.IntervalDataStructure.PresentTraceCellArray=PTCA;    %update the IntervalDataStructure
     guidata(gcbo,handles); 
     set(handles.ButtonChoice,'Value',10);
@@ -1692,6 +1930,7 @@ set(handles.ButtonChoice,'Value',11);
     
 %***********************************************************************
     case 11         % Display AOIs around a mouse click
+    
     set(handles.DataOperation,'Value',0)
     axes(handles.axes3)
                                         % user clicks on trace near event
@@ -1734,15 +1973,17 @@ set(handles.ButtonChoice,'Value',11);
                 FrameHigh=MaximumFrames;
             end
         end
-        
+       
         AxisLimitsVector=[FrameLow FrameHigh AxisLimitsVector(cols-1:cols)];
                   % Replace the limits of the AOI frames to display
+         
         set(handles.AxisLimits,'String',[ '[ ' num2str(AxisLimitsVector) ']'])
+        
         guidata(gcbo,handles);
                 % Then invoke the DisplayAOIs callback
-               
+           
         DisplayAOIs_Callback(handles.DisplayAOIs, eventdata, handles)
-            
+           
     end
     end
     
@@ -1994,7 +2235,109 @@ set(handles.ButtonChoice,'Value',11);
     guidata(handles.parenthandles_fig,parenthandles);
 
 %  **********************************************************************
+    case 17
+        % Create a background aoifits structure and save it in a file
+        % called 'bkdefault.dat'.  In order to to this, the aoifits for the
+        % data (not background corrected) should be loaded in the middle
+        % plot (parenthandles.aoifits1) and the aoifits for the background
+        % AOIs should be loaded in the lower plot (parenthandles.aoifits2)
+        Bkgndaoifits=parenthandles.aoifits2;    % aoifits for the background AOIs
+        Refaoifits=parenthandles.aoifits1;      % aoifits for data AOIs
+        logik=Refaoifits.data(:,1,1)==1;        % Picks out all rows for  
+                                                % data AOI #1
+        ldata=sum(logik);                       % Length of the integrated data traces
+        SGwindow=round(ldata/5);                % Savitsky-Golay smoothing parameter, 
+                                          % Window set to (1/5) length of data trace 
+        %SGwindow=round(ldata/15)
+        if SGwindow/2==round(SGwindow/2)
+                    % Here if SGwindow is even (it must be odd)
+            SGwindow=SGwindow+1;
+        end
+        SGsmooth = [2 SGwindow];          % Savitsky-Golay smoothing parameters
+                            % Using 2nd order polynomial, and window size
+                            % that is (1/5) length of integrated trace
+      
+        %aoifits=SmoothBackground_v1(Bkgndaoifits, SGsmooth, Refaoifits);
+        
+        %keyboard
+         %aoifits=SmoothBackground_v2(Bkgndaoifits, SGsmooth, Refaoifits);   % v2: remove background AOI outliers frame by frame
+         %aoifits=SmoothBackground_v3(Bkgndaoifits, SGsmooth, Refaoifits,parenthandles);   % v3: remove background AOI outliers frame by frame
+                                                            % that have a nearby detected spot (need AllSpots loaded 
+         %aoifits=SmoothBackground_v4(Bkgndaoifits, SGsmooth, Refaoifits,parenthandles);  % v4 fit background AOI values to a plane
+      
+         aoifits=SmoothBackground_v5(Bkgndaoifits, SGsmooth, Refaoifits,parenthandles);  % v5 remove slight baseline offset using
+                                                                                     % DetrendAfterBackgroundSubtraction
+         %keyboard
+        
+        set(handles.DataOperation,'Value',0)        % reset the toggle to 0 when done
+         set(handles.ButtonChoice,'Value',11);      % and set menu to 'Click and Display AOIs'
+        eval(['save ' parenthandles.FileLocations.data 'bkdefault.dat aoifits']);
+        parenthandles.aoifits1=aoifits;
+        guidata(gcbo,handles);                  % Update the handles structure
+        guidata(handles.parenthandles_fig,parenthandles);
+%  **********************************************************************
+    case 18
+        % Create a background aoifits structure and save it in a file
+        % called 'bkdefault.dat'.  In order to to this, the aoifits for the
+        % data (not background corrected) should be loaded in the middle
+        % plot (parenthandles.aoifits1) and the aoifits for the background
+        % AOIs should be loaded in the lower plot (parenthandles.aoifits2)
+                    % from RescaleTracesUsingBackground( ) :
+        % Fluorescence intensity across a FOV can vary due to variations in laser excitation
+        % intensity.  This function takes the data traces from a reference aoifits
+        % (for a set a data AOIs) and uses the traces from the associated background 
+        % aoifits ('make bkgnd AOI circle') to correct the traces from reference
+        % aoifits for variations in the laser excitation.  This function will
+        % output an aoifits structure identical to Refaoifits except that data 
+        % traces will be substituted with the re-scaled data traces. 
+        % Bkgndaoifits == aoifits structure (stored by imscroll) for the background
+%            AOIs chosen using the  'make bkgnd AOI circle' operations
+%         Refaoifits == aoifits structure (stored by imscroll) for the reference
+%            AOIs.  It is the traces from these referece AOIs for which we
+%            we seek correct for variations in the laser excitation across
+%            a FOV.  THE LAST 4 AOIs in Refaoifits SHOULD BE OUTSIDE THE
+%            VISIBLE FOV>  THESE WILL PROVIDE A MEASURE OF THE CAMERA
+%            OFFSET (i.e. THE INTEGRATED INTENSITY WITH ZERO LASER
+%            EXCITATION).
 
+        
+        Bkgndaoifits=parenthandles.aoifits2;    % aoifits for the background AOIs
+        Refaoifits=parenthandles.aoifits1;      % aoifits for data AOIs
+        logik=Refaoifits.data(:,1,1)==1;        % Picks out all rows for  
+                                                % data AOI #1
+        ldata=sum(logik);                       % Length of the integrated data traces
+        SGwindow=round(ldata/5);                % Savitsky-Golay smoothing parameter, 
+                                          % Window set to (1/5) length of data trace 
+        %SGwindow=round(ldata/15)
+        if SGwindow/2==round(SGwindow/2)
+                    % Here if SGwindow is even (it must be odd)
+            SGwindow=SGwindow+1;
+        end
+        SGsmooth = [2 SGwindow];          % Savitsky-Golay smoothing parameters
+                            % Using 2nd order polynomial, and window size
+                            % that is (1/5) length of integrated trace
+      
+        %aoifits=SmoothBackground_v1(Bkgndaoifits, SGsmooth, Refaoifits);
+        
+        %keyboard
+         %aoifits=SmoothBackground_v2(Bkgndaoifits, SGsmooth, Refaoifits);   % v2: remove background AOI outliers frame by frame
+         %aoifits=SmoothBackground_v3(Bkgndaoifits, SGsmooth, Refaoifits,parenthandles);   % v3: remove background AOI outliers frame by frame
+                                                            % that have a nearby detected spot (need AllSpots loaded 
+         %aoifits=SmoothBackground_v4(Bkgndaoifits, SGsmooth, Refaoifits,parenthandles);  % v4 fit background AOI values to a plane
+         %aoifits=SmoothBackground_v5(Bkgndaoifits, SGsmooth, Refaoifits,parenthandles);  % v5 remove slight baseline offset using
+                                                                                         % DetrendAfterBackgroundSubtraction
+         aoifits=RescaleTracesUsingBackground(Refaoifits,Bkgndaoifits,SGsmooth,parenthandles);  % Uses SmoothBackground_v5() to subtract off
+                                                                                    % background, and also uses background outside the FOV to 
+                                                                                    % rescale all the traces according to the local laser intensity
+         %keyboard
+        
+        set(handles.DataOperation,'Value',0)        % reset the toggle to 0 when done
+         set(handles.ButtonChoice,'Value',11);      % and set menu to 'Click and Display AOIs'
+        eval(['save ' parenthandles.FileLocations.data 'rescaled_default.dat aoifits']);
+        parenthandles.aoifits1=aoifits;
+        guidata(gcbo,handles);                  % Update the handles structure
+        guidata(handles.parenthandles_fig,parenthandles);
+%  **********************************************************************
 end                         % End of the 'switch' options
 
 
@@ -2067,7 +2410,8 @@ parenthandles = guidata(handles.parenthandles_fig);         % Get the handle str
                                                             % top of this
                                                             % function.
                                         % load the file containing aoifigs
-    eval(['load ' parenthandles.FileLocations.data '\' filestring ' -mat'])
+    %eval(['load ' parenthandles.FileLocations.data '\' filestring ' -mat'])
+    eval(['load ' parenthandles.FileLocations.data filestring ' -mat'])
                                       % get the aoifits variable
 parenthandles.aoifits2=aoifits;
                % now update the variable 'parenthandles' of the top level
@@ -2111,10 +2455,16 @@ parenthandles = guidata(handles.parenthandles_fig);         % Get the handle str
                                                             % top of this
                                                             % function.
                                         % load the file containing aoifits
-     eval(['load ' parenthandles.FileLocations.data '\' filestring ' -mat'])
+     %eval(['load ' parenthandles.FileLocations.data '\' filestring ' -mat'])
+     eval(['load ' parenthandles.FileLocations.data filestring ' -mat'])
                                       % get the aoifits variable
-parenthandles.aoifits1=aoifits;
-               % now update the variable 'parenthandles' of the top level
+if get(handles.LoadAOIFitsChoice,'Value')==1
+     parenthandles.aoifits1=aoifits;
+elseif get(handles.LoadAOIFitsChoice,'Value')==2
+     parenthandles.aoifits3=aoifits;
+end
+    
+    % now update the variable 'parenthandles' of the top level
                % figure (the figure handle) handles.parenthandles_fig.  This
                % replaces the handles structure of the orginal figure with
                % our parenthandles structure in which we have altered the
@@ -2297,6 +2647,7 @@ aoifits2=parenthandles.aoifits2;
 aoinumber2=str2num(get(handles.BottomAOIPlot,'String'));
 logic=( aoifits2.data(:,1)==aoinumber2 );    % logical array picking out data from just the current aoi
 onedata2=aoifits2.data(logic,:);      % Sub matrix with just the data from the current aoi
+%keyboard
     % Get the [x y (aoi#)] coordinates of the current aoi
 %xy2=[round(onedata2(1,4:5)) onedata2(1,1)];
                % Pick out line from aoiinfo2 corresponding to current aoifits and current aoi 
@@ -2337,10 +2688,10 @@ else
     set(parenthandles.MinScale,'String',num2str(clowval));
    
 end
-                                    % If radio button DisplayScales is
-                                    % depressed, use sliders  in
+                                    % If popup menu SliderChoice is
+                                    % set for contrase/brightness, use sliders  in
                                     % plottargout to set display scales
-if get(handles.DisplayScales,'Value')==1
+if get(handles.SliderChoice,'Value')==1     % True if sliders used for contrast/brightness
     clowval=round(get(handles.SliceIndexSlider,'Value'));  % set minimum display intensity
     chival=round(get(handles.FitFrameNumberSlider,'Value'));   % set maximum display intensity
 end
@@ -2408,7 +2759,8 @@ function UpThreshold_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'String') returns contents of UpThreshold as text
 %        str2double(get(hObject,'String')) returns contents of UpThreshold as a double
-handles.IntervalDataStructure.PresentTraceCellArray{1,3}=str2num( get(handles.UpThreshold,'String') );
+        %                                          [(Spot Proximity Radius) (Up Threshold) ] 
+handles.IntervalDataStructure.PresentTraceCellArray{1,3}=[str2num( get(handles.UpThreshold,'String') )];
 guidata(gcbo,handles);
 
 % --- Executes during object creation, after setting all properties.
@@ -2469,6 +2821,7 @@ switch PopupValue
         set(handles.IncreaseEditFrame,'Visible','off')
         set(handles.EditFrame,'Visible','off')
         set(handles.BinarySource,'Visible','off')
+        set(handles.MinIntervalLabel,'Visible','off')
     case 2
                 % Here to delete trace
         set(handles.CumulativeOperation,'Value',0)      % Turn off toggle (that allows user to run through traces)
@@ -2477,6 +2830,7 @@ switch PopupValue
         set(handles.IncreaseEditFrame,'Visible','off')
         set(handles.EditFrame,'Visible','off')
         set(handles.BinarySource,'Visible','off')
+        set(handles.MinIntervalLabel,'Visible','off')
     case 3
                 % Here for Edit mode, single point
         set(handles.CumulativeOperation,'Value',0)      % Turn off toggle (that allows user to run through traces)
@@ -2485,6 +2839,7 @@ switch PopupValue
         set(handles.IncreaseEditFrame,'Visible','on')
         set(handles.EditFrame,'Visible','on')
         set(handles.BinarySource,'Visible','off')
+        set(handles.MinIntervalLabel,'Visible','off')
     case 4
                     % Here for Edit mode, intervals
         set(handles.CumulativeOperation,'Value',0)      % Turn off toggle (that allows user to run through traces)
@@ -2493,11 +2848,22 @@ switch PopupValue
         set(handles.IncreaseEditFrame,'Visible','on')
         set(handles.EditFrame,'Visible','on')
         set(handles.BinarySource,'Visible','off')
+        set(handles.MinIntervalLabel,'Visible','off')
     case 5 
         set(handles.DecreaseEditFrame,'Visible','off')      % Hide the Edit controls
         set(handles.IncreaseEditFrame,'Visible','off')
         set(handles.EditFrame,'Visible','off')
         set(handles.BinarySource,'Visible','on')
+        set(handles.MinIntervalLabel,'Visible','off')
+    case 6
+                    % Here for Edit mode, intervals
+        set(handles.CumulativeOperation,'Value',0)      % Turn off toggle (that allows user to run through traces)
+        set(handles.CumulativeOperation,'BackgroundColor',[.938 .938 .938]);
+        set(handles.DecreaseEditFrame,'Visible','off')   % Make the Edit controls visible
+        set(handles.IncreaseEditFrame,'Visible','off')
+        set(handles.EditFrame,'Visible','on')
+        set(handles.BinarySource,'Visible','off')
+        set(handles.MinIntervalLabel,'Visible','on')
 end
 
 
@@ -2827,27 +3193,56 @@ function FigureAOIBoxes_Callback(hObject, eventdata, handles)
 % Hint: get(hObject,'Value') returns toggle state of FigureAOIBoxes
 
 
-% --- Executes on button press in DisplayScales.
-function DisplayScales_Callback(hObject, eventdata, handles)
-% hObject    handle to DisplayScales (see GCBO)
+% --- Executes on button press in SliderChoice.
+function SliderChoice_Callback(hObject, eventdata, handles)
+% hObject    handle to SliderChoice (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-% Hint: get(hObject,'Value') returns toggle state of DisplayScales
-if get(handles.DisplayScales,'Value')==1
+% Hint: get(hObject,'Value') returns toggle state of SliderChoice
+switch get(handles.SliderChoice,'Value')
+    case 1
+                % Here to prepare sliders for use in setting contrast/brightness  
                 % Activate sliders as display scales
-    if get(handles.FitFrameNumberSlider,'Max')<1000
+        set(handles.TopSliderLabel,'String','max intensity')
+        set(handles.BottomSliderLabel,'String','min intensity')
+        if get(handles.FitFrameNumberSlider,'Max')<1000
                         % Here if the max and min have not previously been
                         % set
+            set(handles.FitFrameNumberSlider,'Max',1000)
+            set(handles.FitFrameNumberSlider,'Min',1)
+            set(handles.FitFrameNumberSlider,'Value',1000)
+            set(handles.FitFrameNumber,'String','1000')
+            set(handles.SliceIndexSlider,'Max',1000)
+            set(handles.SliceIndexSlider,'Min',1)
+            set(handles.SliceIndexSlider,'Value',1)
+            set(handles.SliceIndexNumber,'String','1')
+        end
+    case 2
+        set(handles.TopSliderLabel,'String','sensitivity')
+        set(handles.BottomSliderLabel,'String','threshold')
+                % Here to prepare sliders for use in setting Step Finder parameters
+        set(handles.FitFrameNumberSlider,'Max',5)       % Sensitivity setting max and min
+        set(handles.FitFrameNumberSlider,'Min',.05)
+        set(handles.FitFrameNumberSlider,'Value',1)
+        set(handles.FitFrameNumber,'String','1')
+        set(handles.SliceIndexSlider,'Max',1000)        % Threshold setting for use in Step Finder parameter
+        set(handles.SliceIndexSlider,'Min',1)
+        set(handles.SliceIndexSlider,'Value',1)
+        set(handles.SliceIndexNumber,'String','1')
+    case 3
+        set(handles.TopSliderLabel,'String','Frame Number')
+        set(handles.BottomSliderLabel,'String','Slice Index')
+                            % Here to use sliders for AOI slices or contours 
         set(handles.FitFrameNumberSlider,'Max',1000)
         set(handles.FitFrameNumberSlider,'Min',1)
         set(handles.FitFrameNumberSlider,'Value',1000)
         set(handles.FitFrameNumber,'String','1000')
-        set(handles.SliceIndexSlider,'Max',1000)
-        set(handles.SliceIndexSlider,'Min',1)
+        set(handles.SliceIndexSlider,'Max',1)
+        set(handles.SliceIndexSlider,'Min',0)
         set(handles.SliceIndexSlider,'Value',1)
         set(handles.SliceIndexNumber,'String','1')
-    end
+     
 end
         
         
@@ -2896,6 +3291,9 @@ function EditSpotProximityRadius_Callback(hObject, eventdata, handles)
 handles.SpotProximityRadius=str2num(get(handles.EditSpotProximityRadius,'String'));
 handles.SpotProximityRadius=round(handles.SpotProximityRadius*10)/10;   % Only express in 0.1 increments
 set(handles.EditSpotProximityRadius,'String',num2str(handles.SpotProximityRadius));
+
+    %                                         [(Spot Proximity Radius) ] 
+handles.IntervalDataStructure.PresentTraceCellArray{1,17}=[str2num(get(handles.EditSpotProximityRadius,'String')) ];
 DisplayMiddle_Callback(handles.DisplayMiddle, eventdata, handles)
 guidata(gcbo,handles)
 
@@ -3004,6 +3402,10 @@ if (handles.RowXLimitsMatrixBottom>1)& (get(handles.CustomXLimitsBottomToggle,'V
     handles.RowXLimitsMatrixBottom=handles.RowXLimitsMatrixBottom-1;
     set(handles.axes3,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
     set(handles.axes2,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
+    if (get(handles.MiddlePlotY,'Value')==10)
+            % Here if set to 'int. aoi 1+2+3' => using all 3 axis for plots
+        set(handles.axes1,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
+    end
 end
 guidata(gcbo,handles)
 % --- Executes on button press in IncrementRowXLimitsMatrixBottom.
@@ -3024,6 +3426,10 @@ if (get(handles.CustomXLimitsBottomToggle,'Value')==1)
     end
     set(handles.axes3,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
     set(handles.axes2,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
+    if (get(handles.MiddlePlotY,'Value')==10)
+            % Here if set to 'int. aoi 1+2+3' => using all 3 axis for plots
+        set(handles.axes1,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
+    end
 end
 guidata(gcbo,handles)
 
@@ -3043,12 +3449,20 @@ if get(handles.CustomXLimitsBottomToggle,'Value')==1
                                  % Rescale X axis 
     set(handles.axes3,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
     set(handles.axes2,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
+    if (get(handles.MiddlePlotY,'Value')==10)
+            % Here if set to 'int. aoi 1+2+3' => using all 3 axis for plots
+        set(handles.axes1,'Xlim',[handles.XLimitsMatrixBottom(handles.RowXLimitsMatrixBottom,:)]);
+    end
 else
             % Toggled to off position
     set(handles.CustomXLimitsBottomToggle,'String','off')
             % Reset axis to prior value
     set(handles.axes3,'Xlim',[handles.DefaultXLimitsBottom]);
     set(handles.axes2,'Xlim',[handles.DefaultXLimitsBottom]);
+     if (get(handles.MiddlePlotY,'Value')==10)
+            % Here if set to 'int. aoi 1+2+3' => using all 3 axis for plots
+        set(handles.axes1,'Xlim',[handles.DefaultXLimitsBottom]);
+    end
 end
 guidata(gcbo,handles);
 
@@ -3087,12 +3501,12 @@ aoivector=aoiinfo2(:,6);    % Vector of aoi numbers
                                 % (retain the .PresentTraceCellArray so we
                                 % can keep the mean and std of one trace)
 
-handles.IntervalDataStructure.AllTracesCellArray=cell(1,16);     % Cumulative data from all traces
+handles.IntervalDataStructure.AllTracesCellArray=cell(1,17);     % Cumulative data from all traces
 handles.IntervalDataStructure.CumulativeIntervalArray=[];        % Just the interval list from all traces
-                    % Cycle through all the aois listed in aoifits1
+                    % Cycle through all the aois listed in aoifits2
 
 for aoiindx=1:max(aoirose,aoicol)
- 
+
 
     aoinumber=aoivector(aoiindx);   % Current AOI  
     %log1=aoifits.data(:,1)==aoinumber;
@@ -3105,17 +3519,32 @@ for aoiindx=1:max(aoirose,aoicol)
   
     %*****copy from Data Operation case 15 above to process one aoi
          radius=handles.SpotProximityRadius;           % Proximity of spot to AOI center 
-         radius_hys=str2num(get(handles.UpThreshold,'String'));
          
+         radius_hys=str2num(get(handles.UpThreshold,'String'));
+                    % Bin01Trace = [(frm #)  0/1]
     Bin01Trace=AOISpotLanding(aoinumber,radius,parenthandles,parenthandles.aoifits1.aoiinfo2,radius_hys);          % 1/0 binary trace of spot landings
-   
+                       % Bin01Trace = [(frm #)   (0/1)]
+
+            % Look for value to remove intervals of 0's (zeros) that are too short
+    if get(handles.CumulativeIntervalPopup,'Value')==6
+                        % If popup set to 'Remove Short 0 Intervals' then we will get rid of false neagatives using value in EditFrame text  
+        Min0=str2num( get(handles.EditFrame,'String'));
+    else
+        Min0=1;
+    end       
+    
                                       % w/in radius of the AOI center.  Uses the FrameRange from AllSpots.FrameRange itself   
                                                                      
     MultipleFrameIntervals=PTCA{1,8};   % Use the DataFrameRange [N x 2] from the PTCA 
+   
                % Take binary trace and find all the intervals in it
-                                                      %0.5=upThresh  0.5=downThresh  1=minUP  1=minDown
-    dat=Find_Landings_MultipleFrameIntervals(Bin01Trace,MultipleFrameIntervals,0.5,0.5,1,1);
-  
+               % dat will contain cia data for this AOI
+                                                        %0.5=upThresh  0.5=downThresh  1=minUP  1=minDown
+    dat=Find_Landings_MultipleFrameIntervals(Bin01Trace,MultipleFrameIntervals,0.5,0.5,1,Min0);
+                % dat:  structure w/ members 'BinaryInputTrace' and  'IntervalData',,,
+                % where 'IntervalData' contains cia information
+                % dat.BinaryInputTrace = [0/1/2/3   (frm #)   0/1]   
+     %keyboard  
    % figure(24);plot(Bin01Trace(:,1),Bin01Trace(:,2),'b');           % Plot the binary trace
     
     %axes(handles.axes2);
@@ -3133,7 +3562,7 @@ for aoiindx=1:max(aoirose,aoicol)
      PTCA{1,11}=[PTCA{1,13}(:,2) PTCA{1,13}(:,3)]; 
      PTCA{1,12}=[PTCA{1,11}(:,1) PTCA{1,11}(:,2)-min( PTCA{1,11}(:,2) )];     % Place Input Trace also into DetrendedTrace entry of PTCA
                                        % Note that we subtract off and bring baseline close to zero 
- 
+   % keyboard
     if isempty(tb)
         sprintf('User must input time base file prior to building IntervalData array')
     else
@@ -3148,13 +3577,17 @@ for aoiindx=1:max(aoirose,aoicol)
                         % And AOI number (for column 7)
         
         [IDrose IDcol]=size(dat.IntervalData);
+                        % Need to provide values for columns 5:7 of
+                        % dat.IntervalData(:,5:7)=[ (delta time)  (interval ave intehsity)  AOI#]  
+        
+        
         %InputTrace=PTCA{1,12};          % Detrended trace used here (same definition from above)
        
         RawInputTrace=PTCA{1,11};          % Uncorrected input trace used here 
         aveint=[];
        
        
-        for IDindx=1:IDrose
+        for IDindx=1:IDrose             % Cycle through rows of dat.IntervalData to supply  (ave interval int)  
           
         
              startframe=dat.IntervalData(IDindx,2);
@@ -3181,6 +3614,7 @@ for aoiindx=1:max(aoirose,aoicol)
         % Next expression takes care of incidents where events occur at edge or across boundaries where Glimpse
             % goes off to take other images (multiple Glimpse boxes)% Altered at lines 1515 1616 1881 3141 and in EditBinaryTrace.m  
         medianOneFrame=median(diff(tb));    % median value of one frame duration
+                                            % PTCA{1,10} is the cia data for this AOI 
         PTCA{1,10}=[dat.IntervalData(:,1:4) tb(dat.IntervalData(:,3))-tb(dat.IntervalData(:,2))+medianOneFrame aveint  PTCA{1,2}*ones(IDrose,1)];  
                                %   ****************
         % PTCA{1,10}=[dat.IntervalData(:,1:4) tb(dat.IntervalData(:,3)+1)-tb(dat.IntervalData(:,2)) aveint  PTCA{1,2}*ones(IDrose,1)];  
@@ -3763,3 +4197,24 @@ else
 end
 
 
+% --- Executes on selection change in LoadAOIFitsChoice.
+function LoadAOIFitsChoice_Callback(hObject, eventdata, handles)
+% hObject    handle to LoadAOIFitsChoice (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: contents = cellstr(get(hObject,'String')) returns LoadAOIFitsChoice contents as cell array
+%        contents{get(hObject,'Value')} returns selected item from LoadAOIFitsChoice
+
+
+% --- Executes during object creation, after setting all properties.
+function LoadAOIFitsChoice_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to LoadAOIFitsChoice (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: popupmenu controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end

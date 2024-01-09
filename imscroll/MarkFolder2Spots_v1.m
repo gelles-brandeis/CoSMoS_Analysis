@@ -28,8 +28,8 @@ function pc=MarkFolder2Spots_v1(handles)
                       % in the folder2 sequence file.
 
 %    eval(['load p:\matlab12\larry\data\' folderaoiinfo ' -mat']);
-    eval(['load ' handles.FileLocations.data '\' folderaoiinfo ' -mat']);
-
+    %eval(['load ' handles.FileLocations.data '\' folderaoiinfo ' -mat']);
+    eval(['load ' handles.FileLocations.data folderaoiinfo ' -mat']);
     handles.Folder2aoiinfo=aoiinfo2;
     guidata(gcbo,handles);
 

@@ -12,7 +12,9 @@ function pc = PlotBottom_v1(handles,parenthandles,oneargouts,argnumber)
 % argnumber = the value of the popup menu BottomPlotY that specified
 %        what the user wants to see plotted
 % folder  = folder containing the 'images' file 
-%        e.g. p:\image_data\february_04_05\b9p142a.tif 
+%        e.g. p:\image_data\february_04_05\b9p142a.tif
+% eventdata == optional arguement, allows this subroutine to again call
+%        the calling callback if the Intervals2 is not loaded
 
 % V1 remove folder from arguement 3/21/2010
 
@@ -28,10 +30,15 @@ function pc = PlotBottom_v1(handles,parenthandles,oneargouts,argnumber)
 % A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 % You should have received a copy of the GNU General Public License
 % along with this software. If not, see <http://www.gnu.org/licenses/>.
-
+pc=1;                               % Later on we set pc=10 in the instance where
+                                % the user attempts to bi-color the plot
+                                % but has not yet input the Intervals2
+                                % (signals calling program to just plot
+                                % the integrated trace.
 if isfield(parenthandles,'gfolder')
 folder=parenthandles.gfolder;
 end
+
 aoifits=parenthandles.aoifits2;
 argouts=aoifits.data;          % argouts=[aoi# frame# amp x0 y0 sigma offset (int. AOI)]
 frmmin=min(oneargouts(:,2));                     % Lowest frame number.
@@ -166,6 +173,35 @@ else
             figure(25);plot(oneargouts(frmlog,4),oneargouts(frmlog,5),'b.');
             axes(handles.axes3)
             plot(oneargouts(frmlog,4),oneargouts(frmlog,5),'b.');
+        case 13
+        %Plot the integrated trace, and color the sections where a 
+        %co-localized spot has been detected
+         %Plot the integrated intensity
+        
+            if isempty(handles.IntervalDataStructure2.CumulativeIntervalArray)
+                  % Here if the Intervals structure has not been loaded
+                set(handles.BottomPlotY,'Value',6);     % Change dropdown menu to just display
+                                                % integrated trace (not bicolor trace since
+                                                % the Intervals structure is not loaded 
+                pc=10;          % Signals the calling program to just replot
+                                % the integrated trace (b/c the next commented
+                                % statement did not work w/in this function
+                %DisplayBottom_Callback(handles.DisplayBottom, eventdata, handles)
+            else
+                  % Here if the Intervals structure has been loaded, in which
+                  % case we can color the sections of the trace where a spot
+                  % has been detected
+                dat=extract_aoifits_aois(aoifits);
+                cia=handles.IntervalDataStructure2.CumulativeIntervalArray;
+                offset=0;
+                LowColor=[0.5 0.5 0.5];      % gray
+                HighColor=[0 0 1];           % red
+                %keyboard
+                AOInum=oneargouts(1,1);     % Number of the AOI being plotted
+                                                                                     % 24=figure number
+                ColorColocalizations_plotargout_Bottomaxes3(dat,cia,AOInum,LowColor,HighColor,offset, 25, handles);            
+           
+            end            
     end
 end
   
@@ -189,4 +225,3 @@ else
     handles.DefaultXLimitsBottom=get(handles.axes3,'Xlim');
 end
 guidata(gcbo,handles);  
-pc=1;

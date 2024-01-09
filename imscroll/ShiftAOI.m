@@ -9,7 +9,7 @@ function pc=ShiftAOI(AOInumber,FrameNumber,AOIinfo,DriftList)
 % AOINumber == the number of the aoi (as numbered in AOIinfo) for which the
 %           function computes a shift
 % FrameNumber == the current frame number being displayed
-% AOIinfo == the aoiinfo list of AOI centers and initial frame number, as
+% AOIinfo == the aoiinfo2 list of AOI centers and initial frame number, as
 %            contained in the handles.FitData of imscroll
 %             [framenumber ave x y pixnum aoinumber]
 % DriftList == matrix of frame-by-frame shifts
@@ -45,7 +45,7 @@ currentxy=AOIinfo(aoilogic,3:4);       % Pick off original xy coordinates and
 InitialFrame=AOIinfo(aoilogic,1);      % original frame where aoi was marked
                     % Get the index of the entries corresponding to the 
                     % (initially chosen)  and (current frame) numbers for the aoi 
-
+%keyboard
 Iinitial=find(DriftList(:,1)==InitialFrame);
 Icurrent=find(DriftList(:,1)==FrameNumber);
                     % Both Iinitial and Icurrent should be single numbers

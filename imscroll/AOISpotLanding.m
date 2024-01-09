@@ -27,7 +27,7 @@ function pc=AOISpotLanding(AOInum,radius,handles,aoiinfo2,radius_hys)
 % You should have received a copy of the GNU General Public License
 % along with this software. If not, see <http://www.gnu.org/licenses/>.
 
-
+%keyboard
 FrameRange=handles.AllSpots.FrameVector;       % Vector of frames for which spots were found
 [frmrose frmcol]=size(FrameRange);      % also, frmcol= #rows in AllSpots cell array
 [asrose ascol]=size(handles.AllSpots.AllSpotsCells);
@@ -67,8 +67,8 @@ for frmindex=1:frmcol
                                         %our AOI and the spots in this
                                         %frame
  
-    spotindexhigh=[1:handles.AllSpots.AllSpotsCells{frmindex,2}];       %Vector of spot indices found in this frame 
-                                                            %handles.AllSpots.AllSpotsCells{frmindex,2}= # of frames for which information 
+    spotindexhigh=[1:handles.AllSpots.AllSpotsCells{frmindex,2}];       %making vector of spot indices found in this frame 
+                                                            %handles.AllSpots.AllSpotsCells{frmindex,2}= # of spots for which information 
                                                            % is stored in AllSpotsCells cell array
                                                            % This is for the spots found with the High amplitude threshold  
                     % Distances btwn our AOI and spots found using high amplitude threshold 

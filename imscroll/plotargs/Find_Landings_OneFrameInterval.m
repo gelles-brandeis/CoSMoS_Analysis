@@ -44,6 +44,7 @@ function pc=Find_Landings_OneFrameInterval(InputTrace,UpThreshold,DownThreshold,
                             % First data frame, default will be low unless
                             % the data is above the UpThreshold
 BinaryInputTrace=[ (InputTrace(1,2)>UpThreshold) InputTrace(1,:)];
+%keyboard
 CurrentBinary=BinaryInputTrace(1,1);
                         % Next go through the rest of the InputTrace
                         % assigning each point to either the high (1) or
@@ -76,7 +77,10 @@ end
 
         %Now mark the first interval 0s or 1s with -2 or -3 respectively,
         %and the ending interval 0s or 1s with +2 or +3 respectivley
+    % BinaryInputTrace=[ (0/1)   (frm#)  (0/1) ]
+%keyboard
 dat=Find_Landings_Beginning_End(BinaryInputTrace);
+
 BinaryInputTrace=dat.BinaryInputTrace;
         % dat.BeginningIndex === index of final entry of beginning interval
         % dat.EndingIndex ==index of first entry of ending interval
@@ -105,7 +109,7 @@ CurrentBinary=BinaryInputTrace(dat.BeginningIndex+1,1);     % This should be 0 o
 framestart=InputTrace(dat.BeginningIndex+1,1);              % First frame for the interval that follows the
                                                      % beginning interval
 frameend=framestart;                                % Initial value = framestart;
-             
+%keyboard            
               % Only look for events when the beginning and ending indices 
               % differ by more than one.  When they differ by just one,
      % there are no events (see end of 'Find_Landings_Beginning_End')

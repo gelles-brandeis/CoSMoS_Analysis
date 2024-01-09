@@ -32,5 +32,5 @@ function pc=draw_box(center_xy,x_radius,y_radius,linecolor)
 
 xvec = [center_xy(1)-x_radius  center_xy(1)+x_radius  center_xy(1)+x_radius  center_xy(1)-x_radius center_xy(1)-x_radius];
 yvec =[center_xy(2)-y_radius  center_xy(2)-y_radius  center_xy(2)+y_radius  center_xy(2)+y_radius center_xy(2)-y_radius] ;
-line(xvec,yvec,'color',linecolor,'LineWidth',.5)
+line(xvec,yvec,'color',linecolor,'LineWidth',1)
 pc=1;

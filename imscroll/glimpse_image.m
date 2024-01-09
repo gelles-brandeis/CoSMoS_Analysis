@@ -48,8 +48,11 @@ fid=fopen([folder  num2str(gheader.filenumber(image_number)) '.glimpse'],'r','b'
 fseek(fid,gheader.offset(image_number),'bof');
          % Now retrieve the image
          %
-pc=fread(fid,[gheader.width,gheader.height],'int16=>int16');
+        
+%pc=fread(fid,[gheader.width,gheader.height],'int16=>int16');   % Bad version 
+pc=fread(fid,[gheader.width,gheader.height],'int16=>double');   % jC correct version
             % Now convert output to same range and data type as the tiff
             % files we deal with
+%keyboard
 pc=uint16(pc+32768);
 fclose(fid);

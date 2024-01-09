@@ -54,8 +54,8 @@ yaL=xycenter(2)-radius;
 yaH=xycenter(2)+radius;
                 % Cycle through all the pixels, figuring the fractional
                 % overlap and proportionately adding to the sum.
-                % Note that the pixel center has the integer coordinate and
-                % the pixel edges are at half integers
+                % Note that the PIXEL CENTER HAS THE INTEGER COORDINATE AND
+                % THE PIXEL EDGES ARE AT HALF INTEGERS
 for xpindx=xpixels_low:xpixels_high;
     for ypindx=ypixels_low:ypixels_high
          xpL=xpindx-.5;         % Define x coordinates of the pixel edge
@@ -110,6 +110,13 @@ for xpindx=xpixels_low:xpixels_high;
                 % add to the running total of aoi value, using a proportion
                 % of 0 to 1 of the frame value at the pixel being
                 % considered
+            % Checking values:
+        % if overlap_area>0
+        %     overlap_area
+        %     [xpindx ypindx xoH xoL yoH yoL]
+        %     frm(ypindx,xpindx)
+        % end
+             
          pc=pc+frm(ypindx,xpindx)*overlap_area;
     end
 end

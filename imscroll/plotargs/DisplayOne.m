@@ -21,6 +21,7 @@ function pc=DisplayOne(handles)
 % You should have received a copy of the GNU General Public License
 % along with this software. If not, see <http://www.gnu.org/licenses/>.
 
+OneFigFlag = 0;                     % =1 to also draw figure 27, =0 for no figure
 parenthandles = guidata(handles.parenthandles_fig);  % handle for imscroll gui
 ImageSource1=get(handles.ImageSourceFileType,'Value'); % specifies the file/folder used for AOI images
 if ImageSource1==1                  % here to use Tiff folder
@@ -105,10 +106,11 @@ else
     set(parenthandles.MinScale,'String',num2str(clowval));
    
 end
-                                    % If radio button DisplayScales is
-                                    % depressed, use sliders  in
+                                    % If popup menu SliderChoie is
+                                    % properly selected, use sliders  in
                                     % plottargout to set display scales
-if get(handles.DisplayScales,'Value')==1
+if get(handles.SliderChoice,'Value')==1
+   
     clowval=round(get(handles.SliceIndexSlider,'Value'));  % set minimum display intensity
     chival=round(get(handles.FitFrameNumberSlider,'Value'));   % set maximum display intensity
 end
@@ -130,12 +132,56 @@ xyshifted=xy2(1:2)+XYshift;
                         % Specify the size of the region to be displayed
 limitsxy=[xyshifted(1)-round(ViewMagNum*pixnum/2) xyshifted(1)+round(ViewMagNum*pixnum/2) xyshifted(2)-round(ViewMagNum*pixnum/2) xyshifted(2)+round(ViewMagNum*pixnum/2)]; 
                         % Display the image
+                      
 imagesc(Im1,[clowval chival] );axis('equal');axis 'off';colormap(gray(256));axis(limitsxy)
+if OneFigFlag==1
+    figure(27);hold off;imagesc(Im1,[clowval chival] );axis('equal');axis 'off';colormap(gray(256));axis(limitsxy);hold on
+    axes(handles.axes10);
+end
+
 if get(handles.OneAOIBox,'Value')==1
                 % here if toggle depressed to draw aoi box
                         % Draw the aoi box around the shifted location
      draw_box(xyshifted,AOIBoxPixnumValue/2,AOIBoxPixnumValue/2,'b');
+     if OneFigFlag==1
+     figure(27);draw_box(xyshifted,AOIBoxPixnumValue/2,AOIBoxPixnumValue/2,'b');
+     axes(handles.axes10);
+     end
+     
 end
+% Check if AllSpots is a field of handles
+% Check if there are spots detected in this frame
+% If so, then find the detected spot closest to the AOI for this frame
+% Plot an 'x' at the location of that nearest spot
+% Print a value for the delta=distance btwn spot and AOI center
+%keyboard
+if isfield(parenthandles,'AllSpots')
+    % Here if AllSpots exists
+    if any(MidAOINumber==parenthandles.AllSpots.FrameVector)
+        % Here if our frame number matches that in the list of frames in AllSpots
+        logik=(MidAOINumber==parenthandles.AllSpots.FrameVector);     % pick out the matching frame
+        frmindx=find(logik);                % Index into the AllSpots array matching current frame
+        if ~isempty(parenthandles.AllSpots.AllSpotsCells{frmindx,1})
+            % Here if the list of detected spots for this frame is NOT empty
+             spotindexhigh=[1:parenthandles.AllSpots.AllSpotsCells{frmindx,2}];       %Vector of spot indices found in this frame 
+                                                            %handles.AllSpots.AllSpotsCells{frmindex,2}= # of frames for which information 
+                                                           % is stored in AllSpotsCells cell array
+            distanceshigh=sqrt(  (xyshifted(1)-parenthandles.AllSpots.AllSpotsCells{frmindx,1}(spotindexhigh,1)).^2 +(xyshifted(2)-parenthandles.AllSpots.AllSpotsCells{frmindx,1}(spotindexhigh,2)).^2  );
+            [dmin I]=min(distanceshigh);        % Minimum distance (pixels) btwn AOI center and detected spot, I = index for that spot
+            dmin=round(dmin*100)/100;           % limit to two digits past decimal point
+            hold on
+           
+            plot(parenthandles.AllSpots.AllSpotsCells{frmindx,1}(I,1),parenthandles.AllSpots.AllSpotsCells{frmindx,1}(I,2),'rx','MarkerSize',10,'LineWidth',2)
+            text(limitsxy(1)+1,limitsxy(3)+1,num2str(dmin),'Color','r');   % Print the minimum distance in upper left corner
+            hold off
+            if OneFigFlag==1
+            figure(27); plot(parenthandles.AllSpots.AllSpotsCells{frmindx,1}(I,1),parenthandles.AllSpots.AllSpotsCells{frmindx,1}(I,2),'rx','MarkerSize',10,'LineWidth',2)
+            text(limitsxy(1)+1,limitsxy(3)+1,num2str(dmin),'Color','r');   % Print the minimum distance in upper left corner
+            end
+        end
+    end
+end
+
 pc=1;
  
    
